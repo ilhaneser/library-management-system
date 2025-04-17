@@ -1,0 +1,214 @@
+/* Custom variables to override Bootstrap */
+:root {
+  --primary: #6200ea;
+  --secondary: #03dac6;
+  --success: #28a745;
+  --danger: #dc3545;
+  --warning: #ffc107;
+  --info: #17a2b8;
+  --light: #f8f9fa;
+  --dark: #343a40;
+}
+
+/* Custom navbar styles */
+.navbar-custom {
+  background-color: var(--primary);
+}
+
+.navbar-custom .navbar-brand,
+.navbar-custom .nav-link {
+  color: white;
+}
+
+.navbar-custom .nav-link:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Footer styles */
+.footer {
+  background-color: var(--dark);
+  color: white;
+  padding: 2rem 0 0;
+}
+
+.footer a {
+  color: white;
+}
+
+.footer a:hover {
+  color: var(--secondary);
+  text-decoration: none;
+}
+
+.footer-bottom {
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 1rem 0;
+  margin-top: 2rem;
+}
+
+/* Book card styles */
+.book-card {
+  height: 100%;
+  transition: transform 0.3s ease;
+}
+
+.book-card:hover {
+  transform: translateY(-5px);
+}
+
+.book-cover {
+  height: 250px;
+  overflow: hidden;
+}
+
+.book-cover img {
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.book-card:hover .book-cover img {
+  transform: scale(1.05);
+}
+
+/* Hero section styles */
+.hero-section {
+  background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+    /* Use a solid color as fallback */
+    var(--primary);
+  background-size: cover;
+  background-position: center;
+  color: white;
+  padding: 5rem 0;
+  margin-bottom: 3rem;
+}
+
+/* Dashboard stats cards */
+.stats-card {
+  border-left: 4px solid var(--primary);
+  transition: transform 0.3s ease;
+}
+
+.stats-card:hover {
+  transform: translateY(-5px);
+}
+
+.stats-card.border-danger {
+  border-left-color: var(--danger);
+}
+
+.stats-card.border-success {
+  border-left-color: var(--success);
+}
+
+.stats-card.border-info {
+  border-left-color: var(--info);
+}
+
+.stats-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.5rem;
+}
+
+.stats-value {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+/* Custom status badges */
+.status-badge {
+  padding: 0.25em 0.6em;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-active {
+  background-color: rgba(40, 167, 69, 0.1);
+  color: var(--success);
+}
+
+.status-returned {
+  background-color: rgba(23, 162, 184, 0.1);
+  color: var(--info);
+}
+
+.status-overdue {
+  background-color: rgba(220, 53, 69, 0.1);
+  color: var(--danger);
+}
+
+/* Search and filters */
+.search-container {
+  background-color: var(--light);
+  padding: 1.5rem;
+  border-radius: 0.25rem;
+  margin-bottom: 2rem;
+}
+
+/* Book details */
+.book-image {
+  border-radius: 0.25rem;
+  overflow: hidden;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.book-meta {
+  background-color: var(--light);
+  padding: 1rem;
+  border-radius: 0.25rem;
+}
+
+/* Custom alert animations */
+.alert-custom {
+  animation: fadeIn 0.5s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive overrides */
+@media (max-width: 768px) {
+  .hero-section h1 {
+    font-size: 2.5rem;
+  }
+  
+  .book-cover {
+    height: 200px;
+  }
+  
+  .stats-card {
+    margin-bottom: 1rem;
+  }
+}
+
+/* Border left utility classes */
+.border-left-primary {
+  border-left: 4px solid var(--primary);
+}
+
+.border-left-success {
+  border-left: 4px solid var(--success);
+}
+
+.border-left-info {
+  border-left: 4px solid var(--info);
+}
+
+.border-left-danger {
+  border-left: 4px solid var(--danger);
+}
