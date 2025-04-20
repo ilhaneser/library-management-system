@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import Spinner from '../layout/Spinner';
 import AuthContext from '../../context/auth/AuthContext';
@@ -16,7 +16,9 @@ const BookDetails = () => {
   const { setAlert } = alertContext;
 
   const [book, setBook] = useState(null);
+  const [activeLoan, setActiveLoan] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [borrowing, setBorrowing] = useState(false);
   const [review, setReview] = useState({
     rating: 5,
     comment: ''
@@ -26,19 +28,65 @@ const BookDetails = () => {
 
   useEffect(() => {
     fetchBook();
+    if (isAuthenticated) {
+      checkActiveLoan();
+    }
     // eslint-disable-next-line
-  }, [id]);
+  }, [id, isAuthenticated]);
 
   const fetchBook = async () => {
     try {
       const res = await axios.get(`/api/books/${id}`);
       setBook(res.data.data);
+      console.log("Book cover path from API:", res.data.data.coverImage);
     } catch (err) {
       setAlert('Book not found', 'danger');
       navigate('/books');
     } finally {
       setLoading(false);
     }
+  };
+  
+  const checkActiveLoan = async () => {
+    try {
+      const res = await axios.get('/api/loans/myloans?status=active');
+      const userLoans = res.data.data;
+      
+      // Find active loan for this book
+      const loan = userLoans.find(loan => 
+        loan.book._id === id && loan.status === 'active'
+      );
+      
+      if (loan) {
+        setActiveLoan(loan);
+      }
+    } catch (err) {
+      console.error('Error checking active loans:', err);
+    }
+  };
+
+  // Function to get the correct image URL directly from backend
+  const getImageUrl = (coverImage) => {
+    // Get the backend URL from axios defaults or use the default
+    const backendUrl = axios.defaults.baseURL || 'http://localhost:5001';
+    
+    // Handle empty or default case
+    if (!coverImage || coverImage === 'default-book-cover.jpg') {
+      return '/img/default-book-cover.jpg';
+    }
+    
+    // Extract just the filename regardless of path format
+    let filename;
+    if (coverImage.includes('/')) {
+      // If it has a path, extract just the filename
+      filename = coverImage.split('/').pop();
+    } else {
+      // It's already just a filename
+      filename = coverImage;
+    }
+    
+    // Return direct URL to backend
+    return `${backendUrl}/direct-file/covers/${filename}`;
   };
 
   // Check if user has already reviewed this book
@@ -80,6 +128,52 @@ const BookDetails = () => {
       setAlert(err.response.data.error || 'Error submitting review', 'danger');
     }
   };
+  
+  const handleBorrow = async () => {
+    if (!isAuthenticated) {
+      setAlert('Please login to borrow books', 'danger');
+      navigate('/login');
+      return;
+    }
+    
+    setBorrowing(true);
+    
+    try {
+      const res = await axios.post('/api/loans', {
+        bookId: id
+      });
+      
+      setActiveLoan(res.data.data);
+      setAlert('Book borrowed successfully!', 'success');
+      
+      // Update book data to reflect availability change
+      fetchBook();
+    } catch (err) {
+      setAlert(err.response?.data?.error || 'Error borrowing book', 'danger');
+    } finally {
+      setBorrowing(false);
+    }
+  };
+  
+  const handleStartReading = () => {
+    if (!activeLoan) return;
+    navigate(`/read/${activeLoan._id}`);
+  };
+  
+  const handleReturnBook = async () => {
+    if (!activeLoan) return;
+    
+    try {
+      await axios.put(`/api/loans/${activeLoan._id}/return`);
+      setActiveLoan(null);
+      setAlert('Book returned successfully', 'success');
+      
+      // Update book data to reflect availability change
+      fetchBook();
+    } catch (err) {
+      setAlert(err.response?.data?.error || 'Error returning book', 'danger');
+    }
+  };
 
   if (loading) {
     return <Spinner />;
@@ -97,17 +191,26 @@ const BookDetails = () => {
     publicationYear,
     genre,
     description,
-    availableCopies,
-    copies,
-    location,
+    maxConcurrentLoans,
+    activeLoans,
+    totalPages,
     coverImage,
     reviews = []
   } = book;
+  
+  // Check if book is available for loan
+  const isAvailableForLoan = activeLoans < maxConcurrentLoans;
 
   // Calculate average rating
   const averageRating = reviews.length > 0
     ? (reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length).toFixed(1)
     : 'No ratings yet';
+    
+  // Calculate reading progress
+  let readingProgress = 0;
+  if (activeLoan) {
+    readingProgress = Math.round((activeLoan.lastReadPage / totalPages) * 100);
+  }
 
   return (
     <div className="book-details">
@@ -119,13 +222,87 @@ const BookDetails = () => {
         <div className="col-md-4 mb-4">
           <div className="book-image">
             <img
-              src={coverImage && coverImage !== 'default-book-cover.jpg'
-                ? coverImage
-                : '/img/default-book-cover.jpg'
-              }
+              src={getImageUrl(coverImage)}
               alt={title}
               className="img-fluid"
+              onError={(e) => {
+                // Only log the error if this isn't already the default image
+                if (!e.target.src.includes('default-book-cover.jpg')) {
+                  console.error("Failed to load image:", e.target.src);
+                  e.target.src = '/img/default-book-cover.jpg';
+                  // Prevent infinite error loops by removing the error handler after fallback
+                  e.target.onerror = null;
+                }
+              }}
             />
+          </div>
+          
+          {/* Book actions */}
+          <div className="book-actions mt-3">
+            {isAuthenticated && (
+              activeLoan ? (
+                <div className="d-grid gap-2">
+                  <button 
+                    className="btn btn-success btn-lg mb-2"
+                    onClick={handleStartReading}
+                  >
+                    <i className="fas fa-book-reader mr-2"></i> Continue Reading
+                  </button>
+                  
+                  {readingProgress > 0 && (
+                    <div className="progress mb-2" style={{ height: '20px' }}>
+                      <div 
+                        className="progress-bar" 
+                        role="progressbar" 
+                        style={{ width: `${readingProgress}%` }}
+                        aria-valuenow={readingProgress}
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                      >
+                        {readingProgress}% complete
+                      </div>
+                    </div>
+                  )}
+                  
+                  <p className="text-center">
+                    <small className="text-muted">
+                      Last page read: {activeLoan.lastReadPage} of {totalPages}
+                    </small>
+                  </p>
+                  
+                  <button 
+                    className="btn btn-outline-secondary"
+                    onClick={handleReturnBook}
+                  >
+                    <i className="fas fa-undo-alt mr-2"></i> Return Book
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="btn btn-primary btn-lg btn-block"
+                  disabled={!isAvailableForLoan || borrowing}
+                  onClick={handleBorrow}
+                >
+                  {borrowing ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></span>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-book mr-2"></i>
+                      {isAvailableForLoan ? 'Borrow Book' : 'Not Available'}
+                    </>
+                  )}
+                </button>
+              )
+            )}
+            
+            {!isAuthenticated && (
+              <Link to="/login" className="btn btn-outline-primary btn-block">
+                <i className="fas fa-sign-in-alt mr-2"></i> Login to Borrow
+              </Link>
+            )}
           </div>
         </div>
 
@@ -151,13 +328,11 @@ const BookDetails = () => {
                   <p><strong>Publication Year:</strong> {publicationYear}</p>
                   <p>
                     <strong>Availability:</strong>{' '}
-                    <span className={availableCopies > 0 ? 'text-success' : 'text-danger'}>
-                      {availableCopies} of {copies} copies available
+                    <span className={isAvailableForLoan ? 'text-success' : 'text-danger'}>
+                      {activeLoans} of {maxConcurrentLoans} copies in use
                     </span>
                   </p>
-                  <p>
-                    <strong>Location:</strong> {location.section}, Shelf {location.shelf}
-                  </p>
+                  <p><strong>Total Pages:</strong> {totalPages}</p>
                 </div>
               </div>
             </div>
@@ -168,34 +343,22 @@ const BookDetails = () => {
             <p>{description}</p>
           </div>
 
-          <div className="book-actions">
-            {isAuthenticated && user.role !== 'admin' && (
+          {isAuthenticated && (user.role === 'admin' || user.role === 'librarian') && (
+            <div className="admin-actions">
               <button
-                className="btn btn-primary"
-                disabled={availableCopies === 0}
-                onClick={() => navigate(`/books/${id}/borrow`)}
+                onClick={() => navigate(`/admin/books/${id}/edit`)}
+                className="btn btn-dark mr-2"
               >
-                {availableCopies === 0 ? 'Not Available' : 'Borrow Book'}
+                <i className="fas fa-edit mr-1"></i> Edit Book
               </button>
-            )}
-
-            {isAuthenticated && (user.role === 'admin' || user.role === 'librarian') && (
-              <div className="admin-actions">
-                <button
-                  onClick={() => navigate(`/admin/books/${id}/edit`)}
-                  className="btn btn-dark mr-2"
-                >
-                  <i className="fas fa-edit mr-1"></i> Edit Book
-                </button>
-                <button
-                  onClick={() => navigate(`/admin/books/${id}/delete`)}
-                  className="btn btn-danger"
-                >
-                  <i className="fas fa-trash-alt mr-1"></i> Delete Book
-                </button>
-              </div>
-            )}
-          </div>
+              <button
+                onClick={() => navigate(`/admin/books/${id}/delete`)}
+                className="btn btn-danger"
+              >
+                <i className="fas fa-trash-alt mr-1"></i> Delete Book
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

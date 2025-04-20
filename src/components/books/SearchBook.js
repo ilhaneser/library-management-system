@@ -11,7 +11,8 @@ const SearchBooks = () => {
     title: '',
     author: '',
     genre: '',
-    available: false
+    available: false,
+    digitalOnly: false  // New filter for books with PDFs
   });
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -42,7 +43,7 @@ const SearchBooks = () => {
     }
   };
 
-  const { title, author, genre, available } = filters;
+  const { title, author, genre, available, digitalOnly } = filters;
   const { currentPage, totalPages } = pagination;
 
   // Handle search submission
@@ -87,6 +88,7 @@ const SearchBooks = () => {
       if (author) queryParams += `&author=${author}`;
       if (genre) queryParams += `&genre=${genre}`;
       if (available) queryParams += `&available=true`;
+      if (digitalOnly) queryParams += `&digitalOnly=true`;
 
       const res = await axios.get(`/api/books${queryParams}`);
       
@@ -132,7 +134,8 @@ const SearchBooks = () => {
       title: '',
       author: '',
       genre: '',
-      available: false
+      available: false,
+      digitalOnly: false
     });
   };
 
@@ -223,8 +226,8 @@ const SearchBooks = () => {
                     </div>
                     
                     <div className="col-md-6">
-                      <div className="form-group">
-                        <div className="custom-control custom-checkbox mt-4">
+                      <div className="form-group mt-4">
+                        <div className="custom-control custom-checkbox">
                           <input
                             type="checkbox"
                             className="custom-control-input"
@@ -233,7 +236,24 @@ const SearchBooks = () => {
                             checked={available}
                             onChange={onFilterChange}
                           />
-                          <label className="custom-control-label" htmlFor="available">Available Only</label>
+                          <label className="custom-control-label" htmlFor="available">
+                            Available Books Only
+                          </label>
+                        </div>
+                        
+                        {/* New checkbox for PDF filter */}
+                        <div className="custom-control custom-checkbox mt-2">
+                          <input
+                            type="checkbox"
+                            className="custom-control-input"
+                            name="digitalOnly"
+                            id="digitalOnly"
+                            checked={digitalOnly}
+                            onChange={onFilterChange}
+                          />
+                          <label className="custom-control-label" htmlFor="digitalOnly">
+                            Books with PDF Only
+                          </label>
                         </div>
                       </div>
                     </div>

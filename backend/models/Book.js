@@ -35,34 +35,39 @@ const BookSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  copies: {
+  // PDF file path (required for all books)
+  pdfFile: {
+    type: String,
+    required: true
+  },
+  // Number of concurrent loans allowed
+  maxConcurrentLoans: {
     type: Number,
     required: true,
-    min: 0,
-    default: 1
+    min: 1,
+    default: 3
   },
-  availableCopies: {
+  // Current number of active loans
+  activeLoans: {
     type: Number,
-    min: 0,
-    default: function() {
-      return this.copies;
-    }
+    default: 0,
+    min: 0
   },
-  location: {
-    shelf: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    section: {
-      type: String,
-      required: true,
-      trim: true
-    }
-  },
+  // Book cover image
   coverImage: {
     type: String,
     default: 'default-book-cover.jpg'
+  },
+  // Total pages in the PDF
+  totalPages: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  // Total loan count (for popularity tracking)
+  loanCount: {
+    type: Number,
+    default: 0
   },
   addedOn: {
     type: Date,
@@ -98,18 +103,25 @@ BookSchema.index({
   description: 'text' 
 });
 
-// Add methods to handle book availability
-BookSchema.methods.borrow = function() {
-  if (this.availableCopies > 0) {
-    this.availableCopies -= 1;
+// Check if book is available for loan
+BookSchema.virtual('isAvailableForLoan').get(function() {
+  return this.activeLoans < this.maxConcurrentLoans;
+});
+
+// Method to increment active loans
+BookSchema.methods.incrementLoan = function() {
+  if (this.activeLoans < this.maxConcurrentLoans) {
+    this.activeLoans += 1;
+    this.loanCount += 1;
     return true;
   }
   return false;
 };
 
-BookSchema.methods.return = function() {
-  if (this.availableCopies < this.copies) {
-    this.availableCopies += 1;
+// Method to decrement active loans
+BookSchema.methods.decrementLoan = function() {
+  if (this.activeLoans > 0) {
+    this.activeLoans -= 1;
     return true;
   }
   return false;

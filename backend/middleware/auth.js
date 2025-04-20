@@ -12,6 +12,10 @@ exports.protect = async (req, res, next) => {
   ) {
     // Get token from header
     token = req.headers.authorization.split(' ')[1];
+  } 
+  // Check if token exists in query params (for PDF iframe)
+  else if (req.query.token) {
+    token = req.query.token;
   }
 
   // Check if token exists

@@ -13,7 +13,7 @@ import NotFound from './components/pages/NotFound';
 // Books Components
 import SearchBooks from './components/books/SearchBooks';
 import BookDetails from './components/books/BookDetails';
-import BorrowBook from './components/books/BorrowBook';
+import PdfReader from './components/books/PdfReader'; // PDF Reader component
 
 // User Components
 import UserProfile from './components/users/UserProfile';
@@ -56,7 +56,8 @@ const AppRoutes = () => {
             <Route path="/wishlist" element={<PrivateRoute component={Wishlist} />} />
             <Route path="/myloans" element={<PrivateRoute component={MyLoans} />} />
             <Route path="/loans/:id" element={<PrivateRoute component={LoanDetails} />} />
-            <Route path="/books/:id/borrow" element={<PrivateRoute component={BorrowBook} />} />
+            <Route path="/read/:id" element={<PrivateRoute component={PdfReader} />} />
+
             
             {/* Admin/Librarian Routes */}
             <Route path="/admin/dashboard" element={<AdminRoute component={Dashboard} roles={['admin', 'librarian']} />} />

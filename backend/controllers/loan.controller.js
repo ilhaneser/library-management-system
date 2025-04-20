@@ -35,7 +35,7 @@ exports.getLoans = async (req, res) => {
     // Find loans with pagination
     const loans = await Loan.find(filter)
       .populate('user', 'name email')
-      .populate('book', 'title author ISBN')
+      .populate('book', 'title author ISBN totalPages coverImage')
       .populate('issuedBy', 'name')
       .sort(sort)
       .limit(parseInt(limit))
@@ -69,7 +69,7 @@ exports.getUserLoans = async (req, res) => {
     if (status) filter.status = status;
     
     const loans = await Loan.find(filter)
-      .populate('book', 'title author ISBN coverImage')
+      .populate('book', 'title author ISBN coverImage totalPages')
       .sort(sort);
     
     res.status(200).json({
@@ -92,7 +92,7 @@ exports.getLoan = async (req, res) => {
   try {
     const loan = await Loan.findById(req.params.id)
       .populate('user', 'name email contactNumber')
-      .populate('book', 'title author ISBN publisher publicationYear genre coverImage')
+      .populate('book', 'title author ISBN publisher publicationYear genre totalPages coverImage')
       .populate('issuedBy', 'name');
     
     if (!loan) {
@@ -127,33 +127,21 @@ exports.getLoan = async (req, res) => {
 
 // @desc    Create new loan (borrow book)
 // @route   POST /api/loans
-// @access  Private (Admin/Librarian)
+// @access  Private (User)
 exports.createLoan = async (req, res) => {
   try {
-    const { userId, bookId, dueDate } = req.body;
+    const { bookId } = req.body;
+    const userId = req.user.id;
+    
+    // Default loan period (21 days)
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 21);
     
     // Validate required fields
-    if (!userId || !bookId || !dueDate) {
+    if (!bookId) {
       return res.status(400).json({
         success: false,
-        error: 'User ID, Book ID, and Due Date are required'
-      });
-    }
-    
-    // Check if user exists
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-    
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(400).json({
-        success: false,
-        error: 'User account is not active'
+        error: 'Book ID is required'
       });
     }
     
@@ -166,24 +154,11 @@ exports.createLoan = async (req, res) => {
       });
     }
     
-    // Check if book is available
-    if (book.availableCopies <= 0) {
+    // Check if book is available for loan
+    if (book.activeLoans >= book.maxConcurrentLoans) {
       return res.status(400).json({
         success: false,
-        error: 'Book is not available for borrowing'
-      });
-    }
-    
-    // Check if user has reached maximum allowed books
-    const activeLoans = await Loan.countDocuments({
-      user: userId,
-      status: 'active'
-    });
-    
-    if (activeLoans >= user.maxBooksAllowed) {
-      return res.status(400).json({
-        success: false,
-        error: `User has reached the maximum limit of ${user.maxBooksAllowed} books`
+        error: 'Book is not available for borrowing at this time'
       });
     }
     
@@ -197,7 +172,21 @@ exports.createLoan = async (req, res) => {
     if (existingLoan) {
       return res.status(400).json({
         success: false,
-        error: 'User already has an active loan for this book'
+        error: 'You already have an active loan for this book'
+      });
+    }
+    
+    // Check if user has reached maximum allowed loans
+    const activeLoans = await Loan.countDocuments({
+      user: userId,
+      status: 'active'
+    });
+    
+    const user = await User.findById(userId);
+    if (activeLoans >= user.maxBooksAllowed) {
+      return res.status(400).json({
+        success: false,
+        error: `You have reached the maximum limit of ${user.maxBooksAllowed} borrowed books`
       });
     }
     
@@ -205,12 +194,13 @@ exports.createLoan = async (req, res) => {
     const loan = await Loan.create({
       user: userId,
       book: bookId,
-      dueDate: new Date(dueDate),
-      issuedBy: req.user.id
+      dueDate: dueDate,
+      lastReadPage: 1
     });
     
     // Update book availability
-    book.availableCopies -= 1;
+    book.activeLoans += 1;
+    book.loanCount += 1;
     await book.save();
     
     res.status(201).json({
@@ -236,7 +226,7 @@ exports.createLoan = async (req, res) => {
 
 // @desc    Return book
 // @route   PUT /api/loans/:id/return
-// @access  Private (Admin/Librarian)
+// @access  Private (User)
 exports.returnBook = async (req, res) => {
   try {
     const loan = await Loan.findById(req.params.id);
@@ -245,6 +235,17 @@ exports.returnBook = async (req, res) => {
       return res.status(404).json({
         success: false,
         error: 'Loan not found'
+      });
+    }
+    
+    // Check if user owns this loan or is admin/librarian
+    if (
+      req.user.role === 'user' && 
+      loan.user.toString() !== req.user.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to return this loan'
       });
     }
     
@@ -269,7 +270,7 @@ exports.returnBook = async (req, res) => {
     
     // Update book availability
     const book = await Book.findById(loan.book);
-    book.availableCopies += 1;
+    book.activeLoans -= 1;
     await book.save();
     
     res.status(200).json({
@@ -339,6 +340,72 @@ exports.renewLoan = async (req, res) => {
     res.status(200).json({
       success: true,
       data: loan
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
+// @desc    Update reading progress
+// @route   PUT /api/loans/:id/progress
+// @access  Private (User)
+exports.updateReadingProgress = async (req, res) => {
+  try {
+    const { pageNumber, sessionDuration = 300 } = req.body; // Default 5 minutes
+    
+    if (!pageNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'Page number is required'
+      });
+    }
+    
+    const loan = await Loan.findById(req.params.id).populate('book');
+    
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        error: 'Loan not found'
+      });
+    }
+    
+    // Check if user owns this loan
+    if (loan.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to update this loan'
+      });
+    }
+    
+    // Check if loan is active
+    if (loan.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot update reading progress on inactive loan'
+      });
+    }
+    
+    // Validate page number
+    if (pageNumber > loan.book.totalPages) {
+      return res.status(400).json({
+        success: false,
+        error: `Page number cannot exceed total pages (${loan.book.totalPages})`
+      });
+    }
+    
+    // Update reading progress
+    loan.updateReadingProgress(pageNumber, sessionDuration);
+    await loan.save();
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        lastReadPage: loan.lastReadPage,
+        progress: Math.round((loan.lastReadPage / loan.book.totalPages) * 100)
+      }
     });
   } catch (error) {
     res.status(500).json({

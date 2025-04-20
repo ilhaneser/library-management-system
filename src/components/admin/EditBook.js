@@ -18,16 +18,17 @@ const EditBook = () => {
     publicationYear: '',
     genre: '',
     description: '',
-    copies: 1,
-    location: {
-      shelf: '',
-      section: ''
-    },
-    coverImage: ''
+    maxConcurrentLoans: 3,
+    totalPages: 1,
+    coverImage: '',
+    pdfFile: null
   });
 
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState({
+    cover: false,
+    pdf: false
+  });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -48,13 +49,13 @@ const EditBook = () => {
         publicationYear: bookData.publicationYear || new Date().getFullYear(),
         genre: bookData.genre || '',
         description: bookData.description || '',
-        copies: bookData.copies || 1,
-        location: {
-          shelf: bookData.location?.shelf || '',
-          section: bookData.location?.section || ''
-        },
-        coverImage: bookData.coverImage || 'default-book-cover.jpg'
+        maxConcurrentLoans: bookData.maxConcurrentLoans || 3,
+        totalPages: bookData.totalPages || 1,
+        coverImage: bookData.coverImage || 'default-book-cover.jpg',
+        pdfFile: bookData.pdfFile || null
       });
+      
+      console.log("Book data loaded:", bookData);
     } catch (err) {
       setAlert('Error fetching book details', 'danger');
       navigate('/admin/books');
@@ -71,27 +72,41 @@ const EditBook = () => {
     publicationYear,
     genre,
     description,
-    copies,
-    location,
-    coverImage
+    maxConcurrentLoans,
+    totalPages,
+    coverImage,
+    pdfFile
   } = book;
 
   const onChange = (e) => {
-    if (e.target.name.startsWith('location.')) {
-      const locationField = e.target.name.split('.')[1];
-      setBook({
-        ...book,
-        location: {
-          ...location,
-          [locationField]: e.target.value
-        }
-      });
-    } else {
-      setBook({
-        ...book,
-        [e.target.name]: e.target.value
-      });
+    setBook({
+      ...book,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  // Function to get the correct image URL directly from backend
+  const getImageUrl = (coverImage) => {
+    // Get the backend URL from axios defaults or use the default
+    const backendUrl = axios.defaults.baseURL || 'http://localhost:5001';
+    
+    // Handle empty or default case
+    if (!coverImage || coverImage === 'default-book-cover.jpg') {
+      return '/img/default-book-cover.jpg';
     }
+    
+    // Extract just the filename regardless of path format
+    let filename;
+    if (coverImage.includes('/')) {
+      // If it has a path, extract just the filename
+      filename = coverImage.split('/').pop();
+    } else {
+      // It's already just a filename
+      filename = coverImage;
+    }
+    
+    // Return direct URL to backend
+    return `${backendUrl}/direct-file/covers/${filename}`;
   };
 
   const handleImageUpload = async (e) => {
@@ -101,7 +116,7 @@ const EditBook = () => {
     const formData = new FormData();
     formData.append('coverImage', file);
 
-    setUploading(true);
+    setUploading({...uploading, cover: true});
 
     try {
       const res = await axios.post('/api/upload/cover', formData, {
@@ -119,7 +134,42 @@ const EditBook = () => {
     } catch (err) {
       setAlert('Error uploading cover image', 'danger');
     } finally {
-      setUploading(false);
+      setUploading({...uploading, cover: false});
+    }
+  };
+
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check if it's a PDF file
+    if (file.type !== 'application/pdf') {
+      setAlert('Please upload a PDF file', 'danger');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('pdfFile', file);
+
+    setUploading({...uploading, pdf: true});
+
+    try {
+      const res = await axios.post('/api/upload/pdf', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setBook({
+        ...book,
+        pdfFile: res.data.filePath
+      });
+
+      setAlert('PDF uploaded successfully', 'success');
+    } catch (err) {
+      setAlert('Error uploading PDF file', 'danger');
+    } finally {
+      setUploading({...uploading, pdf: false});
     }
   };
 
@@ -134,9 +184,7 @@ const EditBook = () => {
       !publisher ||
       !publicationYear ||
       !genre ||
-      !description ||
-      !location.shelf ||
-      !location.section
+      !description
     ) {
       setAlert('Please fill in all required fields', 'danger');
       return;
@@ -156,6 +204,14 @@ const EditBook = () => {
     }
   };
 
+  const removePdf = () => {
+    setBook({
+      ...book,
+      pdfFile: null
+    });
+    setAlert('PDF file removed', 'success');
+  };
+
   if (loading) {
     return <Spinner />;
   }
@@ -171,14 +227,17 @@ const EditBook = () => {
               <div className="col-md-3">
                 <div className="text-center mb-4">
                   <img
-                    src={
-                      coverImage === 'default-book-cover.jpg'
-                        ? '/img/default-book-cover.jpg'
-                        : coverImage
-                    }
+                    src={getImageUrl(coverImage)}
                     alt="Book Cover"
                     className="img-fluid rounded mb-3"
                     style={{ maxHeight: '300px' }}
+                    onError={(e) => {
+                      if (!e.target.src.includes('default-book-cover.jpg')) {
+                        console.error("Failed to load image:", e.target.src);
+                        e.target.src = '/img/default-book-cover.jpg';
+                        e.target.onerror = null;
+                      }
+                    }}
                   />
                   <div className="custom-file">
                     <input
@@ -187,12 +246,49 @@ const EditBook = () => {
                       id="coverImage"
                       accept="image/*"
                       onChange={handleImageUpload}
-                      disabled={uploading}
+                      disabled={uploading.cover}
                     />
                     <label className="custom-file-label" htmlFor="coverImage">
-                      {uploading ? 'Uploading...' : 'Choose cover image'}
+                      {uploading.cover ? 'Uploading...' : 'Choose cover image'}
                     </label>
                   </div>
+                </div>
+
+                {/* PDF File Upload Section */}
+                <div className="mb-4">
+                  <h5 className="mb-3">PDF Version</h5>
+                  {pdfFile ? (
+                    <div className="text-center">
+                      <div className="alert alert-success">
+                        <i className="fas fa-file-pdf mr-2"></i>
+                        PDF uploaded successfully
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger"
+                        onClick={removePdf}
+                      >
+                        <i className="fas fa-trash mr-1"></i> Remove PDF
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="custom-file">
+                      <input
+                        type="file"
+                        className="custom-file-input"
+                        id="pdfFile"
+                        accept="application/pdf"
+                        onChange={handlePdfUpload}
+                        disabled={uploading.pdf}
+                      />
+                      <label className="custom-file-label" htmlFor="pdfFile">
+                        {uploading.pdf ? 'Uploading...' : 'Choose PDF file'}
+                      </label>
+                      <small className="form-text text-muted mt-2">
+                        Upload a PDF version of this book.
+                      </small>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -260,7 +356,7 @@ const EditBook = () => {
                 </div>
 
                 <div className="row">
-                  <div className="col-md-3">
+                  <div className="col-md-4">
                     <div className="form-group">
                       <label htmlFor="publicationYear">Year <span className="text-danger">*</span></label>
                       <input
@@ -276,7 +372,7 @@ const EditBook = () => {
                       />
                     </div>
                   </div>
-                  <div className="col-md-3">
+                  <div className="col-md-4">
                     <div className="form-group">
                       <label htmlFor="genre">Genre <span className="text-danger">*</span></label>
                       <input
@@ -290,15 +386,15 @@ const EditBook = () => {
                       />
                     </div>
                   </div>
-                  <div className="col-md-3">
+                  <div className="col-md-4">
                     <div className="form-group">
-                      <label htmlFor="copies">Copies <span className="text-danger">*</span></label>
+                      <label htmlFor="totalPages">Total Pages <span className="text-danger">*</span></label>
                       <input
                         type="number"
                         className="form-control"
-                        id="copies"
-                        name="copies"
-                        value={copies}
+                        id="totalPages"
+                        name="totalPages"
+                        value={totalPages}
                         onChange={onChange}
                         min="1"
                         required
@@ -310,30 +406,20 @@ const EditBook = () => {
                 <div className="row">
                   <div className="col-md-6">
                     <div className="form-group">
-                      <label htmlFor="location.section">Section <span className="text-danger">*</span></label>
+                      <label htmlFor="maxConcurrentLoans">Max Concurrent Loans</label>
                       <input
-                        type="text"
+                        type="number"
                         className="form-control"
-                        id="location.section"
-                        name="location.section"
-                        value={location.section}
+                        id="maxConcurrentLoans"
+                        name="maxConcurrentLoans"
+                        value={maxConcurrentLoans}
                         onChange={onChange}
+                        min="1"
                         required
                       />
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="form-group">
-                      <label htmlFor="location.shelf">Shelf <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        id="location.shelf"
-                        name="location.shelf"
-                        value={location.shelf}
-                        onChange={onChange}
-                        required
-                      />
+                      <small className="text-muted">
+                        Maximum number of users who can borrow this book simultaneously
+                      </small>
                     </div>
                   </div>
                 </div>

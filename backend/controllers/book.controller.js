@@ -1,5 +1,8 @@
 const Book = require('../models/Book');
 const Loan = require('../models/Loan');
+const fs = require('fs');
+const path = require('path');
+const { PDFDocument } = require('pdf-lib');
 
 // @desc    Get all books
 // @route   GET /api/books
@@ -9,8 +12,8 @@ exports.getBooks = async (req, res) => {
     const { 
       title, 
       author, 
-      genre, 
-      available, 
+      genre,
+      available, // Available for loan
       sort = 'title', 
       page = 1, 
       limit = 10 
@@ -21,7 +24,7 @@ exports.getBooks = async (req, res) => {
     if (title) filter.title = { $regex: title, $options: 'i' };
     if (author) filter.author = { $regex: author, $options: 'i' };
     if (genre) filter.genre = { $regex: genre, $options: 'i' };
-    if (available === 'true') filter.availableCopies = { $gt: 0 };
+    if (available === 'true') filter.activeLoans = { $lt: '$maxConcurrentLoans' };
 
     // Count total documents that match the filter
     const total = await Book.countDocuments(filter);
@@ -74,6 +77,59 @@ exports.getBook = async (req, res) => {
   }
 };
 
+// @desc    Read book PDF file
+// @route   GET /api/books/:id/read
+// @access  Private
+exports.readBookPdf = async (req, res) => {
+  try {
+    const book = await Book.findById(req.params.id);
+    
+    if (!book) {
+      return res.status(404).json({
+        success: false,
+        error: 'Book not found'
+      });
+    }
+    
+    // Check if user has an active loan for this book
+    const activeLoan = await Loan.findOne({
+      user: req.user.id,
+      book: req.params.id,
+      status: 'active'
+    });
+    
+    if (!activeLoan) {
+      return res.status(403).json({
+        success: false,
+        error: 'You must borrow this book before reading'
+      });
+    }
+    
+    // PDF path
+    const pdfPath = path.join(__dirname, '..', book.pdfFile.replace(/^\/uploads/, 'uploads'));
+    
+    // Check if file exists
+    if (!fs.existsSync(pdfPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'PDF file not found'
+      });
+    }
+    
+    // Set security headers to prevent download
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Content-Type', 'application/pdf');
+    
+    // Send file to client for inline viewing
+    res.sendFile(pdfPath);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
 // @desc    Search books
 // @route   GET /api/books/search
 // @access  Public
@@ -114,6 +170,31 @@ exports.searchBooks = async (req, res) => {
 // @access  Private (Admin/Librarian)
 exports.addBook = async (req, res) => {
   try {
+    // Check if PDF file path is provided
+    if (!req.body.pdfFile) {
+      return res.status(400).json({
+        success: false,
+        error: 'PDF file is required'
+      });
+    }
+    
+    // Calculate total pages if not provided
+    if (!req.body.totalPages) {
+      const pdfPath = path.join(__dirname, '..', req.body.pdfFile.replace(/^\/uploads/, 'uploads'));
+      if (fs.existsSync(pdfPath)) {
+        try {
+          const pdfBytes = fs.readFileSync(pdfPath);
+          const pdfDoc = await PDFDocument.load(pdfBytes);
+          req.body.totalPages = pdfDoc.getPageCount();
+        } catch (err) {
+          console.error('Error calculating PDF pages:', err);
+          req.body.totalPages = 1; // Default if can't calculate
+        }
+      } else {
+        req.body.totalPages = 1; // Default if file not found
+      }
+    }
+    
     const book = await Book.create(req.body);
     
     res.status(201).json({
@@ -147,6 +228,26 @@ exports.addBook = async (req, res) => {
 // @access  Private (Admin/Librarian)
 exports.updateBook = async (req, res) => {
   try {
+    // If updating PDF, recalculate total pages
+    if (req.body.pdfFile && req.body.pdfFile !== req.body.currentPdfFile) {
+      const pdfPath = path.join(__dirname, '..', req.body.pdfFile.replace(/^\/uploads/, 'uploads'));
+      if (fs.existsSync(pdfPath)) {
+        try {
+          const pdfBytes = fs.readFileSync(pdfPath);
+          const pdfDoc = await PDFDocument.load(pdfBytes);
+          req.body.totalPages = pdfDoc.getPageCount();
+        } catch (err) {
+          console.error('Error calculating PDF pages:', err);
+          // Don't update totalPages if can't calculate
+        }
+      }
+    }
+    
+    // Remove currentPdfFile from data to update
+    if (req.body.currentPdfFile) {
+      delete req.body.currentPdfFile;
+    }
+    
     const book = await Book.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -189,7 +290,7 @@ exports.deleteBook = async (req, res) => {
     // Check if book has active loans
     const activeLoans = await Loan.find({
       book: req.params.id,
-      returnDate: null
+      status: 'active'
     });
     
     if (activeLoans.length > 0) {
@@ -206,6 +307,22 @@ exports.deleteBook = async (req, res) => {
         success: false,
         error: 'Book not found'
       });
+    }
+    
+    // Delete PDF file
+    if (book.pdfFile) {
+      const pdfPath = path.join(__dirname, '..', book.pdfFile.replace(/^\/uploads/, 'uploads'));
+      if (fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
+      }
+    }
+    
+    // Delete cover image
+    if (book.coverImage && book.coverImage !== 'default-book-cover.jpg') {
+      const coverPath = path.join(__dirname, '..', book.coverImage.replace(/^\/uploads/, 'uploads'));
+      if (fs.existsSync(coverPath)) {
+        fs.unlinkSync(coverPath);
+      }
     }
     
     res.status(200).json({

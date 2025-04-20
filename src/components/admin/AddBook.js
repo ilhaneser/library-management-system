@@ -16,15 +16,16 @@ const AddBook = () => {
     publicationYear: new Date().getFullYear(),
     genre: '',
     description: '',
-    copies: 1,
-    location: {
-      shelf: '',
-      section: ''
-    },
-    coverImage: 'default-book-cover.jpg'
+    maxConcurrentLoans: 3,
+    totalPages: 1,
+    coverImage: 'default-book-cover.jpg',
+    pdfFile: ''
   });
 
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState({
+    cover: false,
+    pdf: false
+  });
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -35,37 +36,33 @@ const AddBook = () => {
     publicationYear,
     genre,
     description,
-    copies,
-    location,
-    coverImage
+    maxConcurrentLoans,
+    totalPages,
+    coverImage,
+    pdfFile
   } = book;
 
   const onChange = (e) => {
-    if (e.target.name.startsWith('location.')) {
-      const locationField = e.target.name.split('.')[1];
-      setBook({
-        ...book,
-        location: {
-          ...location,
-          [locationField]: e.target.value
-        }
-      });
-    } else {
-      setBook({
-        ...book,
-        [e.target.name]: e.target.value
-      });
-    }
+    setBook({
+      ...book,
+      [e.target.name]: e.target.value
+    });
   };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setAlert('Please upload an image file', 'danger');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('coverImage', file);
 
-    setUploading(true);
+    setUploading({...uploading, cover: true});
 
     try {
       const res = await axios.post('/api/upload/cover', formData, {
@@ -83,7 +80,48 @@ const AddBook = () => {
     } catch (err) {
       setAlert('Error uploading cover image', 'danger');
     } finally {
-      setUploading(false);
+      setUploading({...uploading, cover: false});
+    }
+  };
+
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      setAlert('Please upload a PDF file', 'danger');
+      return;
+    }
+
+    // Validate file size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      setAlert('PDF size should be less than 50MB', 'danger');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('pdfFile', file);
+
+    setUploading({...uploading, pdf: true});
+
+    try {
+      const res = await axios.post('/api/upload/pdf', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setBook({
+        ...book,
+        pdfFile: res.data.filePath
+      });
+
+      setAlert('PDF uploaded successfully', 'success');
+    } catch (err) {
+      setAlert('Error uploading PDF file', 'danger');
+    } finally {
+      setUploading({...uploading, pdf: false});
     }
   };
 
@@ -99,10 +137,9 @@ const AddBook = () => {
       !publicationYear ||
       !genre ||
       !description ||
-      !location.shelf ||
-      !location.section
+      !pdfFile // PDF is required
     ) {
-      setAlert('Please fill in all required fields', 'danger');
+      setAlert('Please fill in all required fields, including PDF file', 'danger');
       return;
     }
 
@@ -147,12 +184,40 @@ const AddBook = () => {
                       id="coverImage"
                       accept="image/*"
                       onChange={handleImageUpload}
-                      disabled={uploading}
+                      disabled={uploading.cover}
                     />
                     <label className="custom-file-label" htmlFor="coverImage">
-                      {uploading ? 'Uploading...' : 'Choose cover image'}
+                      {uploading.cover ? 'Uploading...' : 'Choose cover image'}
                     </label>
                   </div>
+                </div>
+
+                {/* PDF File Upload Section */}
+                <div className="mb-4">
+                  <h5 className="mb-3">PDF File <span className="text-danger">*</span></h5>
+                  {pdfFile ? (
+                    <div className="text-center">
+                      <div className="alert alert-success">
+                        <i className="fas fa-file-pdf mr-2"></i>
+                        PDF uploaded successfully
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="custom-file">
+                      <input
+                        type="file"
+                        className="custom-file-input"
+                        id="pdfFile"
+                        accept="application/pdf"
+                        onChange={handlePdfUpload}
+                        disabled={uploading.pdf}
+                        required
+                      />
+                      <label className="custom-file-label" htmlFor="pdfFile">
+                        {uploading.pdf ? 'Uploading...' : 'Choose PDF file'}
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -220,7 +285,7 @@ const AddBook = () => {
                 </div>
 
                 <div className="row">
-                  <div className="col-md-3">
+                  <div className="col-md-4">
                     <div className="form-group">
                       <label htmlFor="publicationYear">Year <span className="text-danger">*</span></label>
                       <input
@@ -236,7 +301,7 @@ const AddBook = () => {
                       />
                     </div>
                   </div>
-                  <div className="col-md-3">
+                  <div className="col-md-4">
                     <div className="form-group">
                       <label htmlFor="genre">Genre <span className="text-danger">*</span></label>
                       <input
@@ -250,19 +315,22 @@ const AddBook = () => {
                       />
                     </div>
                   </div>
-                  <div className="col-md-3">
+                  <div className="col-md-4">
                     <div className="form-group">
-                      <label htmlFor="copies">Copies <span className="text-danger">*</span></label>
+                      <label htmlFor="totalPages">Total Pages <span className="text-danger">*</span></label>
                       <input
                         type="number"
                         className="form-control"
-                        id="copies"
-                        name="copies"
-                        value={copies}
+                        id="totalPages"
+                        name="totalPages"
+                        value={totalPages}
                         onChange={onChange}
                         min="1"
                         required
                       />
+                      <small className="text-muted">
+                        This will be calculated automatically if left as 1
+                      </small>
                     </div>
                   </div>
                 </div>
@@ -270,30 +338,19 @@ const AddBook = () => {
                 <div className="row">
                   <div className="col-md-6">
                     <div className="form-group">
-                      <label htmlFor="location.section">Section <span className="text-danger">*</span></label>
+                      <label htmlFor="maxConcurrentLoans">Max Concurrent Loans</label>
                       <input
-                        type="text"
+                        type="number"
                         className="form-control"
-                        id="location.section"
-                        name="location.section"
-                        value={location.section}
+                        id="maxConcurrentLoans"
+                        name="maxConcurrentLoans"
+                        value={maxConcurrentLoans}
                         onChange={onChange}
-                        required
+                        min="1"
                       />
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="form-group">
-                      <label htmlFor="location.shelf">Shelf <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        id="location.shelf"
-                        name="location.shelf"
-                        value={location.shelf}
-                        onChange={onChange}
-                        required
-                      />
+                      <small className="text-muted">
+                        How many users can borrow this book at the same time
+                      </small>
                     </div>
                   </div>
                 </div>
@@ -324,7 +381,7 @@ const AddBook = () => {
               <button 
                 type="submit"
                 className="btn btn-primary"
-                disabled={submitting}
+                disabled={submitting || !pdfFile}
               >
                 {submitting ? (
                   <>

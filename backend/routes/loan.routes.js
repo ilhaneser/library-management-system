@@ -5,14 +5,17 @@ const { protect, authorize } = require('../middleware/auth');
 
 // User routes
 router.get('/myloans', protect, loanController.getUserLoans);
+router.post('/', protect, loanController.createLoan);  // Users can create their own loans (borrow books)
 
 // Protected routes for both users and staff
 router.get('/:id', protect, loanController.getLoan);
 router.put('/:id/renew', protect, loanController.renewLoan);
+router.put('/:id/return', protect, loanController.returnBook);
+
+// Reading progress route
+router.put('/:id/progress', protect, loanController.updateReadingProgress);
 
 // Staff only routes
 router.get('/', protect, authorize('admin', 'librarian'), loanController.getLoans);
-router.post('/', protect, authorize('admin', 'librarian'), loanController.createLoan);
-router.put('/:id/return', protect, authorize('admin', 'librarian'), loanController.returnBook);
 
 module.exports = router;
