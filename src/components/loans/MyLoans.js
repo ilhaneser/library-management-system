@@ -4,6 +4,35 @@ import axios from 'axios';
 import Spinner from '../layout/Spinner';
 import AlertContext from '../../context/alert/AlertContext';
 
+// Helper function to handle image paths
+const getBookCoverUrl = (coverImage) => {
+  // Get the backend URL from axios defaults or use the default
+  const backendUrl = axios.defaults.baseURL || 'http://localhost:5001';
+  
+  // Handle empty or default case
+  if (!coverImage || coverImage === 'default-book-cover.jpg') {
+    return '/img/default-book-cover.jpg';
+  }
+  
+  // Extract just the filename regardless of path format
+  let filename;
+  if (coverImage.includes('/')) {
+    // If it has a path, extract just the filename
+    filename = coverImage.split('/').pop();
+  } else {
+    // It's already just a filename
+    filename = coverImage;
+  }
+  
+  // Handle different path formats
+  if (coverImage.startsWith('/uploads/')) {
+    return `${backendUrl}${coverImage}`;
+  }
+  
+  // Return direct URL to backend
+  return `${backendUrl}/direct-file/covers/${filename}`;
+};
+
 const MyLoans = () => {
   const alertContext = useContext(AlertContext);
   const { setAlert } = alertContext;
@@ -29,9 +58,16 @@ const MyLoans = () => {
       // Fetch returned loans
       const returnedRes = await axios.get('/api/loans/myloans?status=returned');
       
+      // Filter out loans with null book references
+      const validActiveLoans = activeRes.data.data ? 
+        activeRes.data.data.filter(loan => loan && loan.book) : [];
+      
+      const validReturnedLoans = returnedRes.data.data ? 
+        returnedRes.data.data.filter(loan => loan && loan.book) : [];
+      
       setLoans({
-        active: activeRes.data.data,
-        returned: returnedRes.data.data
+        active: validActiveLoans,
+        returned: validReturnedLoans
       });
     } catch (err) {
       console.error('Error fetching loans:', err);
@@ -114,23 +150,32 @@ const MyLoans = () => {
                 <div className="card-body">
                   <div className="row">
                     <div className="col-md-2 col-sm-3 mb-3 mb-md-0">
-                      <img
-                        src={
-                          loan.book.coverImage && loan.book.coverImage !== 'default-book-cover.jpg'
-                            ? loan.book.coverImage
-                            : '/img/default-book-cover.jpg'
-                        }
-                        alt={loan.book.title}
-                        className="img-fluid rounded"
-                      />
+                      {loan.book && (
+                        <img
+                          src={getBookCoverUrl(loan.book.coverImage)}
+                          alt={loan.book.title || "Book cover"}
+                          className="img-fluid rounded"
+                          onError={(e) => {
+                            console.log('Image failed to load:', e.target.src);
+                            e.target.src = '/img/default-book-cover.jpg';
+                            e.target.onerror = null;
+                          }}
+                        />
+                      )}
                     </div>
                     <div className="col-md-7 col-sm-9">
-                      <h4>
-                        <Link to={`/books/${loan.book._id}`}>
-                          {loan.book.title}
-                        </Link>
-                      </h4>
-                      <p className="text-muted mb-1">By: {loan.book.author}</p>
+                      {loan.book ? (
+                        <>
+                          <h4>
+                            <Link to={`/books/${loan.book._id}`}>
+                              {loan.book.title}
+                            </Link>
+                          </h4>
+                          <p className="text-muted mb-1">By: {loan.book.author}</p>
+                        </>
+                      ) : (
+                        <h4>Book information unavailable</h4>
+                      )}
                       
                       <div className="loan-info mt-3">
                         <p>
@@ -170,9 +215,11 @@ const MyLoans = () => {
                           )}
                         </button>
                       )}
-                      <Link to={`/books/${loan.book._id}`} className="btn btn-outline-secondary btn-block mt-2">
-                        <i className="fas fa-book mr-1"></i> View Book
-                      </Link>
+                      {loan.book && (
+                        <Link to={`/books/${loan.book._id}`} className="btn btn-outline-secondary btn-block mt-2">
+                          <i className="fas fa-book mr-1"></i> View Book
+                        </Link>
+                      )}
                     </div>
                   </div>
                   
@@ -200,23 +247,32 @@ const MyLoans = () => {
                 <div className="card-body">
                   <div className="row">
                     <div className="col-md-2 col-sm-3 mb-3 mb-md-0">
-                      <img
-                        src={
-                          loan.book.coverImage && loan.book.coverImage !== 'default-book-cover.jpg'
-                            ? loan.book.coverImage
-                            : '/img/default-book-cover.jpg'
-                        }
-                        alt={loan.book.title}
-                        className="img-fluid rounded"
-                      />
+                      {loan.book && (
+                        <img
+                          src={getBookCoverUrl(loan.book.coverImage)}
+                          alt={loan.book.title || "Book cover"}
+                          className="img-fluid rounded"
+                          onError={(e) => {
+                            console.log('Image failed to load:', e.target.src);
+                            e.target.src = '/img/default-book-cover.jpg';
+                            e.target.onerror = null;
+                          }}
+                        />
+                      )}
                     </div>
                     <div className="col-md-7 col-sm-9">
-                      <h4>
-                        <Link to={`/books/${loan.book._id}`}>
-                          {loan.book.title}
-                        </Link>
-                      </h4>
-                      <p className="text-muted mb-1">By: {loan.book.author}</p>
+                      {loan.book ? (
+                        <>
+                          <h4>
+                            <Link to={`/books/${loan.book._id}`}>
+                              {loan.book.title}
+                            </Link>
+                          </h4>
+                          <p className="text-muted mb-1">By: {loan.book.author}</p>
+                        </>
+                      ) : (
+                        <h4>Book information unavailable</h4>
+                      )}
                       
                       <div className="loan-info mt-3">
                         <p>
@@ -240,9 +296,11 @@ const MyLoans = () => {
                       </div>
                     </div>
                     <div className="col-md-3 d-flex flex-column justify-content-center align-items-center mt-3 mt-md-0">
-                      <Link to={`/books/${loan.book._id}`} className="btn btn-outline-secondary btn-block">
-                        <i className="fas fa-book mr-1"></i> View Book
-                      </Link>
+                      {loan.book && (
+                        <Link to={`/books/${loan.book._id}`} className="btn btn-outline-secondary btn-block">
+                          <i className="fas fa-book mr-1"></i> View Book
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </div>

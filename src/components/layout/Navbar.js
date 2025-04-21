@@ -18,6 +18,11 @@ const Navbar = () => {
         </Link>
       </li>
       <li className="nav-item">
+        <Link className="nav-link" to="/books">
+          <i className="fas fa-search"></i> Search Books
+        </Link>
+      </li>
+      <li className="nav-item">
         <Link className="nav-link" to="/myloans">
           <i className="fas fa-handshake"></i> My Loans
         </Link>
@@ -62,6 +67,11 @@ const Navbar = () => {
       <li className="nav-item">
         <Link className="nav-link" to="/books">
           <i className="fas fa-book"></i> Browse Books
+        </Link>
+      </li>
+      <li className="nav-item">
+        <Link className="nav-link" to="/books">
+          <i className="fas fa-search"></i> Search Books
         </Link>
       </li>
       <li className="nav-item">

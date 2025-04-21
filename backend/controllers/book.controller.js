@@ -135,22 +135,31 @@ exports.readBookPdf = async (req, res) => {
 // @access  Public
 exports.searchBooks = async (req, res) => {
   try {
-    const { query } = req.query;
+    const { query, genre } = req.query;
     
-    if (!query) {
-      return res.status(400).json({
-        success: false,
-        error: 'Search query is required'
-      });
+    // Build search criteria
+    const searchCriteria = {};
+    
+    // Add text search if query provided
+    if (query) {
+      // Use regex for partial matching instead of text index
+      // 'i' flag makes it case insensitive
+      searchCriteria.$or = [
+        { title: { $regex: query, $options: 'i' } },
+        { author: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } }
+      ];
     }
     
-    // Use text index for search
-    const books = await Book.find(
-      { $text: { $search: query } },
-      { score: { $meta: 'textScore' } }
-    )
-    .sort({ score: { $meta: 'textScore' } })
-    .limit(20);
+    // Add genre filter if provided
+    if (genre && genre !== 'all') {
+      searchCriteria.genre = genre;
+    }
+    
+    // Execute search
+    const books = await Book.find(searchCriteria)
+      .limit(20)
+      .sort({ title: 1 });
     
     res.status(200).json({
       success: true,
