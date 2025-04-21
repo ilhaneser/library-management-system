@@ -304,15 +304,33 @@ const AddBook = () => {
                   <div className="col-md-4">
                     <div className="form-group">
                       <label htmlFor="genre">Genre <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
+                      <select
                         className="form-control"
                         id="genre"
                         name="genre"
                         value={genre}
                         onChange={onChange}
                         required
-                      />
+                      >
+                        <option value="">-- Select Genre --</option>
+                        <option value="Fiction">Fiction</option>
+                        <option value="Non-Fiction">Non-Fiction</option>
+                        <option value="Science Fiction">Science Fiction</option>
+                        <option value="Fantasy">Fantasy</option>
+                        <option value="Mystery">Mystery</option>
+                        <option value="Thriller">Thriller</option>
+                        <option value="Romance">Romance</option>
+                        <option value="Biography">Biography</option>
+                        <option value="History">History</option>
+                        <option value="Self-Help">Self-Help</option>
+                        <option value="Business">Business</option>
+                        <option value="Children">Children</option>
+                        <option value="Young Adult">Young Adult</option>
+                        <option value="Science">Science</option>
+                        <option value="Technology">Technology</option>
+                        <option value="Travel">Travel</option>
+                        <option value="Other">Other</option>
+                      </select>
                     </div>
                   </div>
                   <div className="col-md-4">

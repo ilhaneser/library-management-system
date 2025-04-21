@@ -18,18 +18,49 @@ const AdminStats = () => {
 
   const fetchStats = async () => {
     try {
-      // For a real implementation, you would need an admin/stats endpoint
-      // Here we'll simulate it by making separate calls
+      // Fetch books
       const booksRes = await axios.get('/api/books');
-      const usersRes = await axios.get('/api/users');
+      let bookCount = 0;
+      if (booksRes.data && booksRes.data.data && Array.isArray(booksRes.data.data)) {
+        bookCount = booksRes.data.data.length;
+      }
+      
+      // Fetch current user as fallback for user count
+      const currentUserRes = await axios.get('/api/users/profile');
+      let userCount = 0;
+      
+      // Try to get all users first
+      try {
+        const usersRes = await axios.get('/api/users');
+        if (usersRes.data && usersRes.data.data && Array.isArray(usersRes.data.data)) {
+          userCount = usersRes.data.data.length;
+        }
+      } catch (err) {
+        // If fetching all users fails, at least count the current user
+        console.warn('Could not fetch all users, using current user as fallback');
+        userCount = currentUserRes.data && currentUserRes.data.data ? 1 : 0;
+      }
+      
+      // Fetch active loans
       const activeLoansRes = await axios.get('/api/loans?status=active');
+      let activeLoansCount = 0;
+      if (activeLoansRes.data && activeLoansRes.data.data && Array.isArray(activeLoansRes.data.data)) {
+        activeLoansCount = activeLoansRes.data.data.length;
+      }
+      
+      // Fetch overdue loans
       const overdueLoansRes = await axios.get('/api/loans?status=overdue');
+      let overdueLoansCount = 0;
+      if (overdueLoansRes.data && overdueLoansRes.data.data && Array.isArray(overdueLoansRes.data.data)) {
+        overdueLoansCount = overdueLoansRes.data.data.length;
+      }
 
+      // Update stats with the correct counts
       setStats({
-        totalBooks: booksRes.data.total || 0,
-        totalUsers: usersRes.data.count || 0,
-        activeLoans: activeLoansRes.data.total || 0,
-        overdueLoans: overdueLoansRes.data.total || 0
+        totalBooks: bookCount,
+        totalUsers: userCount,
+        activeLoans: activeLoansCount,
+        overdueLoans: overdueLoansCount
       });
     } catch (err) {
       console.error('Error fetching stats:', err);

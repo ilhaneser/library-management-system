@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import Spinner from '../layout/Spinner';
 import AlertContext from '../../context/alert/AlertContext';
+import { getBookCoverUrl } from '../../utilities/imageHelper'; // Import the helper function
 
 const ManageBooks = () => {
   const alertContext = useContext(AlertContext);
@@ -241,14 +242,15 @@ const ManageBooks = () => {
                     <td>
                       <div className="d-flex align-items-center">
                         <img
-                          src={
-                            book.coverImage && book.coverImage !== 'default-book-cover.jpg'
-                              ? book.coverImage
-                              : '/img/default-book-cover.jpg'
-                          }
+                          src={getBookCoverUrl(book.coverImage)}
                           alt={book.title}
                           className="mr-2"
                           style={{ width: '40px', height: '60px', objectFit: 'cover' }}
+                          onError={(e) => {
+                            console.log('Image failed to load:', e.target.src);
+                            e.target.src = '/img/default-book-cover.jpg';
+                            e.target.onerror = null; // Prevent infinite loop
+                          }}
                         />
                         <div>
                           <Link to={`/books/${book._id}`}>{book.title}</Link>
